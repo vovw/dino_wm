@@ -8,12 +8,10 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
-
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 from math import exp
-
 from metrics.lpipsPyTorch import lpips
 
 def l1_loss(network_output, gt):

@@ -1,10 +1,8 @@
 # Adapted from https://github.com/facebookresearch/ijepa/blob/main/src/models/vision_transformer.py 
-
 import numpy as np
 import torch.nn as nn
 
 
-# from src.models.utils.pos_embs import get_1d_sincos_pos_embed
 def get_1d_sincos_pos_embed(emb_dim, grid_size, cls_token=False):
     """
     emb_dim: output dimension for each position
@@ -18,7 +16,6 @@ def get_1d_sincos_pos_embed(emb_dim, grid_size, cls_token=False):
     if cls_token:
         pos_embed = np.concatenate([np.zeros([1, emb_dim]), pos_embed], axis=0)
     return pos_embed
-
 
 def get_1d_sincos_pos_embed_from_grid(emb_dim, pos):
     """

@@ -1,9 +1,7 @@
 # adapted from https://github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/vit.py
 import torch
 from torch import nn
-
 from einops import rearrange, repeat
-from einops.layers.torch import Rearrange
 
 # helpers
 NUM_FRAMES = 1
@@ -109,7 +107,7 @@ class ViTPredictor(nn.Module):
         NUM_FRAMES = num_frames
         NUM_PATCHES = num_patches
 
-        self.pos_embedding = nn.Parameter(torch.randn(1, num_frames * (num_patches), dim)) # dim for the pos encodings # don't add class for now!
+        self.pos_embedding = nn.Parameter(torch.randn(1, num_frames * (num_patches), dim)) # dim for the pos encodings
         self.dropout = nn.Dropout(emb_dropout)
         self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim, dropout)
         self.pool = pool

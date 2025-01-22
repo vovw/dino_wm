@@ -1,15 +1,12 @@
 import torch
+import decord
+import numpy as np
+from pathlib import Path
+from einops import rearrange
+from decord import VideoReader
 from typing import Callable, Optional
 from .traj_dset import TrajDataset, get_train_val_sliced
-from einops import rearrange
-
-import numpy as np
-import decord
-import pickle
-from pathlib import Path
-from decord import VideoReader
 from typing import Optional, Callable, Any
-
 decord.bridge.set_bridge("torch")
 
 class PointMazeDataset(TrajDataset):
@@ -115,7 +112,7 @@ class PointMazeDataset(TrajDataset):
 def load_point_maze_slice_train_val(
     transform,
     n_rollout=50,
-    data_path='/data/datasets/pusht_dataset',
+    data_path='data/pusht_dataset',
     normalize_action=False,
     split_ratio=0.8,
     num_hist=0,

@@ -1,15 +1,9 @@
 import torch
+import decord
+import numpy as np
+from pathlib import Path
 from typing import Callable, Optional
 from .traj_dset import TrajDataset, get_train_val_sliced, TrajSlicerDataset
-from einops import rearrange
-
-import numpy as np
-import decord
-import pickle
-from pathlib import Path
-from decord import VideoReader
-from typing import Optional, Callable, Any
-
 decord.bridge.set_bridge("torch")
 
 # precomputed dataset stats
@@ -21,7 +15,7 @@ STATE_STD = torch.tensor([1.0964, 1.2390, 1.3819, 1.5407])
 class WallDataset(TrajDataset):
     def __init__(
         self,
-        data_path: str = "/data/datasets/wall_single",
+        data_path: str = "data/wall_single",
         n_rollout: Optional[int] = None,
         transform: Optional[Callable] = None,
         normalize_action: bool = False,
@@ -30,14 +24,14 @@ class WallDataset(TrajDataset):
         self.data_path = Path(data_path)
         self.transform = transform
         self.normalize_action = normalize_action
-        print(f"Loading wall dataset...")
-        states = torch.load(self.data_path / f"states.pth")
+        print("Loading wall dataset...")
+        states = torch.load(self.data_path / "states.pth")
         self.states = states
         self.proprios = self.states.clone()
-        self.actions = torch.load(self.data_path / f"actions.pth")
+        self.actions = torch.load(self.data_path / "actions.pth")
         self.actions = self.actions / action_scale
-        self.door_locations = torch.load(self.data_path / f"door_locations.pth")
-        self.wall_locations = torch.load(self.data_path / f"wall_locations.pth")
+        self.door_locations = torch.load(self.data_path / "door_locations.pth")
+        self.wall_locations = torch.load(self.data_path / "wall_locations.pth")
 
         self.n_rollout = n_rollout
         if self.n_rollout:
@@ -85,7 +79,7 @@ class WallDataset(TrajDataset):
         return torch.cat(result, dim=0)
 
     def get_frames(self, idx, frames):
-        obs_dir = self.data_path / f"obses"
+        obs_dir = self.data_path / "obses"
         image = torch.load(obs_dir / f"episode_{idx:03d}.pth")
         act = self.actions[idx, frames]
         state = self.states[idx, frames]
@@ -114,7 +108,7 @@ class WallDataset(TrajDataset):
 def load_wall_slice_train_val(
     transform,
     n_rollout=50,
-    data_path='/data/datasets/wall_single',
+    data_path='data/wall_single',
     normalize_action=False,
     split_ratio=0.8,
     split_mode="random",

@@ -1,15 +1,13 @@
 import torch
-from typing import Callable, Optional
-from .traj_dset import TrajDataset, get_train_val_sliced, TrajSlicerDataset
-from einops import rearrange
-
-import numpy as np
 import decord
 import pickle
+import numpy as np
 from pathlib import Path
+from einops import rearrange
 from decord import VideoReader
+from typing import Callable, Optional
+from .traj_dset import TrajDataset, TrajSlicerDataset
 from typing import Optional, Callable, Any
-
 decord.bridge.set_bridge("torch")
 
 # precomputed dataset stats
@@ -25,7 +23,7 @@ class PushTDataset(TrajDataset):
         self,
         n_rollout: Optional[int] = None,
         transform: Optional[Callable] = None,
-        data_path: str = "/data/datasets/pusht_dataset",
+        data_path: str = "data/pusht_dataset",
         normalize_action: bool = True,
         relative=True,
         action_scale=100.0,
@@ -139,7 +137,7 @@ class PushTDataset(TrajDataset):
 def load_pusht_slice_train_val(
     transform,
     n_rollout=50,
-    data_path="/data/datasets/pusht_dataset",
+    data_path="data/pusht_dataset",
     normalize_action=True,
     split_ratio=0.8,
     num_hist=0,

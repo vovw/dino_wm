@@ -1,14 +1,11 @@
-import os
-import sys
-import numpy as np
-from tqdm import tqdm
+import abc
 import torch
+import numpy as np
 from torch.utils.data import Dataset
-from typing import Callable, Optional, Sequence, List
+from typing import Optional, Sequence, List
 from torch.utils.data import Dataset, Subset
 from torch import default_generator, randperm
 from einops import rearrange
-import abc
 
 # https://github.com/JaidedAI/EasyOCR/issues/1243
 def _accumulate(iterable, fn=lambda x, y: x + y):

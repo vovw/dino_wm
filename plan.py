@@ -1,34 +1,27 @@
 import os
 import gym
+import json
 import hydra
 import random
 import torch
 import pickle
-import warnings
-import numpy as np
-from pathlib import Path
-from einops import rearrange, repeat
-from omegaconf import OmegaConf, open_dict
-
-warnings.filterwarnings("ignore")
-from env.venv import SubprocVectorEnv
-from custom_resolvers import replace_slash
-
-# from .traj_dset import TrajDataset
-from preprocessor import Preprocessor
-from planning.evaluator import PlanEvaluator
-from utils import (
-    cfg_to_dict,
-    seed,
-    slice_trajdict_with_t,
-    aggregate_dct,
-    move_to_device,
-    concat_trajdict,
-)
 import wandb
 import logging
-import json
+import warnings
+import numpy as np
+import submitit
+from itertools import product
+from pathlib import Path
+from einops import rearrange
+from omegaconf import OmegaConf, open_dict
 
+from env.venv import SubprocVectorEnv
+from custom_resolvers import replace_slash
+from preprocessor import Preprocessor
+from planning.evaluator import PlanEvaluator
+from utils import cfg_to_dict, seed
+
+warnings.filterwarnings("ignore")
 log = logging.getLogger(__name__)
 
 ALL_MODEL_KEYS = [
@@ -39,15 +32,9 @@ ALL_MODEL_KEYS = [
     "action_encoder",
 ]
 
-import submitit
-from itertools import product
-import importlib
-
-
 def planning_main_in_dir(working_dir, cfg_dict):
     os.chdir(working_dir)
     return planning_main(cfg_dict=cfg_dict)
-
 
 def launch_plan_jobs(
     epoch,
@@ -92,8 +79,6 @@ def build_plan_cfg_dicts(
     """
     Return a list of plan overrides, for model_path, add a key in the dict {"model_path": model_path}.
     """
-    from hydra import initialize, compose
-
     config_path = os.path.dirname(plan_cfg_path)
     overrides = [
         {
@@ -202,9 +187,8 @@ class PlanWorkspace:
             log_filename=self.log_filename,
         )
 
-        # tmp: assume planning horizon equals to goal horizon
+        # optional: assume planning horizon equals to goal horizon
         from planning.mpc import MPCPlanner
-
         if isinstance(self.planner, MPCPlanner):
             self.planner.sub_planner.horizon = cfg_dict["goal_H"]
             self.planner.n_taken_actions = cfg_dict["goal_H"]
@@ -275,9 +259,6 @@ class PlanWorkspace:
             self.state_0 = init_state  # (b, d)
             self.state_g = rollout_states[:, -1]  # (b, d)
             self.gt_actions = wm_actions
-        # observations = aggregate_dct(observations)
-        # self.obs_0 = {key: arr[:, :1, ...] for key, arr in observations.items()}
-        # self.obs_g = {key: arr[:, -1:, ...] for key, arr in observations.items()}
 
     def sample_traj_segment_from_dset(self, traj_len):
         states = []
@@ -303,7 +284,6 @@ class PlanWorkspace:
                 max_offset = obs["visual"].shape[0] - traj_len
             state = state.numpy()
             offset = random.randint(0, max_offset)
-            print("traj id: ", traj_id, "  Offset: ", offset) # TODO: delete after check
             obs = {
                 key: arr[offset : offset + traj_len]
                 for key, arr in obs.items()

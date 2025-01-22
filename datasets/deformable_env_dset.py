@@ -1,30 +1,21 @@
+import yaml
 import torch
+import decord
+import numpy as np
+from einops import rearrange
+from pathlib import Path
 from typing import Callable, Optional
 from .traj_dset import TrajDataset, get_train_val_sliced
-from einops import rearrange
-
-import numpy as np
-import decord
-import pickle
-from pathlib import Path
-from typing import Optional, Callable, Any
-
 decord.bridge.set_bridge("torch")
-
-import numpy as np
-import scipy
-import yaml
-
 
 def load_yaml(filename):
     # load YAML file
     return yaml.safe_load(open(filename, "r"))
 
-
 class DeformDataset(TrajDataset):
     def __init__(
         self,
-        data_path: str = "/home/gary/AdaptiGraph/src/config/data_gen/rope.yaml",
+        data_path: str = "data/deformable",
         object_name: str = "rope",
         n_rollout: Optional[int] = None,
         transform: Optional[Callable] = None,
@@ -133,7 +124,7 @@ class DeformDataset(TrajDataset):
 def load_deformable_dset_slice_train_val(
     transform,
     n_rollout=50,
-    data_path="/home/",
+    data_path="data/deformable",
     object_name="rope",
     normalize_action=False,
     split_ratio=0.8,

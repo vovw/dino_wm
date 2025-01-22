@@ -1,11 +1,10 @@
 import os
-import numpy as np
-import argparse
 import torch
 import random
+import argparse
+import numpy as np
 from PIL import Image
-from einops import rearrange
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import OmegaConf
 from typing import Callable, Dict
 import psutil
 
@@ -92,28 +91,3 @@ def pil_loader(path):
     with open(path, "rb") as f:
         with Image.open(f) as img:
             return img.convert("RGB")
-
-# inference
-def eval_emb_to_state(model, X, y_tgt):
-    """
-    y_hat = model(X), solve for (y_tgt - y_hat)^2
-    """
-    state_pred_mse = np.mean((model.predict(X) - y_tgt) ** 2).item()
-    return state_pred_mse
-
-def probe_z_to_s(model, X, y_tgt):
-    '''
-    X: (b, t, p, e)
-    y_tgt: (b, t, d2)
-    '''
-    device = X.device
-    X = rearrange(X, "b t p e -> (b t) p e")
-    X = rearrange(X, "bt p e -> bt (p e)")
-    y_tgt = rearrange(y_tgt, 'b t d -> (b t) d')
-
-    X = X.detach().cpu().numpy()
-    y_tgt = y_tgt.detach().cpu().numpy()
-    y_hat = model.predict(X)
-    pred_mse = torch.tensor(np.mean((y_hat - y_tgt) ** 2), device=device)
-    return pred_mse
-
