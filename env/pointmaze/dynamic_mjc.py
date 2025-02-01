@@ -1,6 +1,6 @@
 """
 dynamic_mjc.py
-A small library for programatically building MuJoCo XML files
+A small library for programmatically building MuJoCo XML files
 """
 from contextlib import contextmanager
 import tempfile
