@@ -20,7 +20,6 @@ git clone https://github.com/gaoyuezhou/dino_wm.git
 cd dino_wm
 conda env create -f environment.yaml
 conda activate dino_wm
-pip install hydra-submitit-launcher
 ```
 
 ### Install Mujoco
@@ -58,10 +57,6 @@ source ~/.bashrc
 
 The following are optional installation steps for planning in the deformable environments.
 
-<!-- ```
-# (optional) install additional packages for deformable environments
-pip install pymunk beautifulsoup4 pybullet gym
-``` -->
 ### Install PyFlex (optional for deformable environments)
 
 Install PyFleX if you need to plan within the deformable environments. These installation instructions are adapted from [AdaptiGraph](https://github.com/Boey-li/AdaptiGraph/tree/main).
