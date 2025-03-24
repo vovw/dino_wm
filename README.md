@@ -137,10 +137,28 @@ Once a world model has been trained, you may use it for planning with an example
 python plan.py model_name=<model_name> n_evals=5 planner=cem goal_H=5 goal_source='random_state' planner.opt_steps=30
 ```
 
-where the model is saved at folder `<ckpt_base_path>/<model_name>`, and `<ckpt_base_path>` can be specified in `conf/plan.yaml`.
+where the model is saved at folder `<ckpt_base_path>/outputs/<model_name>`, and `<ckpt_base_path>` can be specified in `conf/plan.yaml`.
 
 <!-- ## Acknowledgement
 TODO -->
+
+# Pre-trained Model Checkpoints
+
+We have uploaded our trained world model checkpoints for PointMaze, PushT, and Wall [here](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28) under `checkpoints`. You can launch planning jobs with their respective configs in the repo:
+
+First, update `ckpt_base_path` to where the checkpoints are saved in the plan configs.
+
+Then launch planning runs with the following commands:
+```bash
+# PointMaze
+python plan.py --config-name plan_point_maze.yaml model_name=point_maze
+# PushT
+python plan.py --config-name plan_pusht.yaml model_name=pusht
+# Wall
+python plan.py --config-name plan_wall.yaml model_name=wall
+```
+
+Planning logs and visualizations can be found in `./plan_outputs`.
 
 
 ## Citation
