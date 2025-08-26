@@ -1,0 +1,66 @@
+defaults:
+  - /encoder: vjepa2
+  - /predictor: vjepa2_st_transformer
+  - /decoder: null  # No decoder by default for efficiency
+
+# Training configuration
+batch_size: 32
+num_epochs: 50
+learning_rate: 1e-4
+weight_decay: 1e-5
+warmup_steps: 1000
+gradient_clip_norm: 1.0
+
+# Model architecture
+model:
+  history_length: 4       # Number of frames in history clip
+  prediction_horizon: 1   # Predict 1 frame ahead
+  frameskip: 1           # Temporal downsampling
+  
+# Dataset configuration  
+data:
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  num_workers: 4
+  pin_memory: true
+  augment_temporal: true    # Randomly vary history length
+  pad_mode: "repeat"        # How to pad insufficient history
+  min_traj_length: 8        # Minimum trajectory length
+
+# Loss configuration
+loss:
+  prediction_weight: 1.0    # Weight for next-frame prediction loss
+  reconstruction_weight: 0.0 # Weight for reconstruction loss (if decoder enabled)
+  consistency_weight: 0.1   # Weight for temporal consistency
+  
+# Optimization
+optimizer:
+  name: "adamw"
+  betas: [0.9, 0.95]
+  eps: 1e-8
+
+scheduler:
+  name: "cosine"
+  T_max: ${num_epochs}
+  eta_min: 1e-6
+
+# Logging
+logging:
+  log_every: 100           # Log every N steps
+  eval_every: 1000         # Evaluate every N steps  
+  save_every: 2000         # Save checkpoint every N steps
+  max_checkpoints: 5       # Maximum checkpoints to keep
+  
+# Mixed precision training
+amp:
+  enabled: true
+  autocast: true
+  grad_scaler: true
+
+# Wandb logging
+wandb:
+  project: "dino_wm_vjepa2"
+  entity: null
+  tags: ["vjepa2", "world_model"]
+  notes: "V-JEPA-2 world model training"

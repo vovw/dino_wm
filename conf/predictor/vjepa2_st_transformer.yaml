@@ -1,0 +1,17 @@
+_target_: models.dynamics.st_transformer.STTransformer
+
+# Architecture
+feature_dim: 256         # Should match encoder projection_dim
+num_layers: 6           # Number of transformer layers
+num_heads: 8            # Number of attention heads
+mlp_ratio: 4.0          # MLP expansion ratio
+dropout: 0.1            # Dropout rate
+max_seq_length: 1000    # Maximum sequence length (T*P)
+
+# Action conditioning
+action_dim: 7           # Will be overridden by environment config
+action_conditioning: "film"  # "film", "cross_attn", "concat", "none"
+
+# Training settings
+gradient_checkpointing: false  # Enable for memory efficiency
+compile: false                 # Enable torch.compile for speed

@@ -1,0 +1,12 @@
+_target_: models.decoder.vjepa2_decoder.ConvDecoder
+
+# Architecture parameters  
+feature_dim: 256               # Should match encoder projection_dim
+patch_size: 16                # Should match encoder tubelet.p
+out_channels: 3               # RGB output
+image_size: 224               # Output image size
+hidden_dims: [512, 256, 128, 64]  # Transposed conv layer dimensions
+kernel_size: 4                # Conv kernel size
+stride: 2                     # Conv stride
+padding: 1                    # Conv padding
+normalize_output: true        # Apply tanh normalization to output

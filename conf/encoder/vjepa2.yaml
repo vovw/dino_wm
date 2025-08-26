@@ -1,0 +1,25 @@
+_target_: models.encoders.vjepa2_encoder.VJEPA2Encoder
+name: "vjepa2"
+variant: "vit-L"  # vit-L, vit-H, vit-g
+resolution: 256   # 256 or 384
+tubelet:
+  t: 2           # temporal dimension
+  p: 16          # spatial patch size
+  
+# Output layer configuration
+out_layer:
+  block_idx: -2   # -1 for last layer, -2 for second-to-last, etc.
+  proj: "post"    # "pre" or "post" projection
+
+# Adapter configurations
+adapter:
+  projection_dim: 256  # project from encoder dim to this
+  normalize: "l2"      # "none", "layernorm", "l2", "whiten"
+  frameize: true       # reshape to per-frame grids for compatibility
+  
+# Caching for MPC speedup
+enable_cache: true
+cache_size: 1000
+
+# Model weights path (set via environment variable VJEPA2_WEIGHTS_PATH)
+weights_path: ${oc.env:VJEPA2_WEIGHTS_PATH,null}

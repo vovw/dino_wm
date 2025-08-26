@@ -1,0 +1,37 @@
+defaults:
+  - _self_
+
+# Model configuration
+model_path: null  # Path to trained V-JEPA-2 world model checkpoint
+env_name: "point_maze"
+action_dim: 7
+frameskip: 1
+
+# Planning configuration
+planner:
+  horizon: 12              # Planning horizon
+  topk: 16                # Number of elite samples
+  num_samples: 128        # Total samples per iteration
+  var_scale: 1.0          # Action noise scale
+  opt_steps: 6            # CEM optimization steps
+  eval_every: 1           # Evaluation frequency
+  history_length: 4       # History frames to maintain
+  
+# Cost function
+cost:
+  type: "cosine"          # "mse", "cosine", "mahalanobis", "predictor_energy"
+  goal_type: "single_image"  # "single_image", "clip_average"
+  kwargs:
+    eps: 1e-5             # For stability
+
+# Evaluation
+num_eval: 10              # Number of trajectories to evaluate
+mode: "evaluate"          # "evaluate", "single", "visualize"
+seed: 42
+
+# Logging
+wandb:
+  project: "vjepa2_planning"
+  entity: null
+  tags: ["vjepa2", "planning", "point_maze"]
+  notes: "V-JEPA-2 planning evaluation on Point Maze"
