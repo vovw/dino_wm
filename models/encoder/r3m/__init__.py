@@ -6,8 +6,8 @@ from .models.models_r3m import R3M
 
 import os
 from os.path import expanduser
-import omegaconf
-import hydra
+
+from config_utils import instantiate
 import gdown
 import torch
 import copy
@@ -83,7 +83,7 @@ def load_r3m(modelid):
 
     modelcfg = omegaconf.OmegaConf.load(configpath)
     cleancfg = cleanup_config(modelcfg)
-    rep = hydra.utils.instantiate(cleancfg)
+    rep = instantiate(cleancfg)
     rep = torch.nn.DataParallel(rep)
     r3m_state_dict = remove_language_head(
         torch.load(modelpath, map_location=torch.device(device))["r3m"]
@@ -123,7 +123,7 @@ def load_r3m_reproduce(modelid):
 
     modelcfg = omegaconf.OmegaConf.load(configpath)
     cleancfg = cleanup_config(modelcfg)
-    rep = hydra.utils.instantiate(cleancfg)
+    rep = instantiate(cleancfg)
     rep = torch.nn.DataParallel(rep)
     r3m_state_dict = remove_language_head(
         torch.load(modelpath, map_location=torch.device(device))["r3m"]

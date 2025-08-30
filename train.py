@@ -1,27 +1,23 @@
 import os
 import time
-import hydra
 import torch
 import wandb
 import logging
 import warnings
-import threading
 import itertools
 import numpy as np
 from tqdm import tqdm
-from omegaconf import OmegaConf, open_dict
 from einops import rearrange
 from accelerate import Accelerator
 from torchvision import utils
 import torch.distributed as dist
 from pathlib import Path
 from collections import OrderedDict
-from hydra.types import RunMode
-from hydra.core.hydra_config import HydraConfig
 from datetime import timedelta
-from concurrent.futures import ThreadPoolExecutor
 from metrics.image_metrics import eval_images
-from utils import slice_trajdict_with_t, cfg_to_dict, seed, sample_tensors
+from utils import slice_trajdict_with_t, seed, sample_tensors
+from configs import TrainConfig, get_pusht_train_config, get_granular_train_config
+from config_utils import instantiate, call, config_to_dict
 
 warnings.filterwarnings("ignore")
 log = logging.getLogger(__name__)
@@ -29,17 +25,16 @@ log = logging.getLogger(__name__)
 class Trainer:
     def __init__(self, cfg):
         self.cfg = cfg
-        with open_dict(cfg):
-            cfg["saved_folder"] = os.getcwd()
-            log.info(f"Model saved dir: {cfg['saved_folder']}")
-        cfg_dict = cfg_to_dict(cfg)
-        model_name = cfg_dict["saved_folder"].split("outputs/")[-1]
+        cfg.saved_folder = os.getcwd()
+        log.info(f"Model saved dir: {cfg.saved_folder}")
+        cfg_dict = config_to_dict(cfg)
+        model_name = cfg_dict["saved_folder"].split("outputs/")[-1] if "outputs/" in cfg_dict["saved_folder"] else "model"
         model_name += f"_{self.cfg.env.name}_f{self.cfg.frameskip}_h{self.cfg.num_hist}_p{self.cfg.num_pred}"
 
-        if HydraConfig.get().mode == RunMode.MULTIRUN:
+        # Simplified DDP setup - only if running in distributed mode
+        if "SLURM_JOB_NODELIST" in os.environ:
             log.info(" Multirun setup begin...")
             log.info(f"SLURM_JOB_NODELIST={os.environ['SLURM_JOB_NODELIST']}")
-            log.info(f"DEBUGVAR={os.environ['DEBUGVAR']}")
             # ==== init ddp process group ====
             os.environ["RANK"] = os.environ["SLURM_PROCID"]
             os.environ["WORLD_SIZE"] = os.environ["SLURM_NTASKS"]
@@ -74,20 +69,20 @@ class Trainer:
             f"Batch_size: {cfg.training.batch_size} num_processes: {self.accelerator.num_processes}."
         )
 
-        OmegaConf.set_struct(cfg, False)
         cfg.effective_batch_size = cfg.training.batch_size
         cfg.gpu_batch_size = cfg.training.batch_size // self.accelerator.num_processes
-        OmegaConf.set_struct(cfg, True)
 
         self.accelerator.wait_for_everyone()
         if self.accelerator.is_main_process:
             wandb_run_id = None
-            if os.path.exists("hydra.yaml"):
-                existing_cfg = OmegaConf.load("hydra.yaml")
-                wandb_run_id = existing_cfg["wandb_run_id"]
-                log.info(f"Resuming Wandb run {wandb_run_id}")
+            if os.path.exists("config.yaml"):
+                import yaml
+                with open("config.yaml", "r") as f:
+                    existing_cfg = yaml.safe_load(f)
+                    wandb_run_id = existing_cfg.get("wandb_run_id")
+                    log.info(f"Resuming Wandb run {wandb_run_id}")
 
-            wandb_dict = OmegaConf.to_container(cfg, resolve=True)
+            wandb_dict = config_to_dict(cfg)
             if self.cfg.debug:
                 log.info("WARNING: Running in debug mode...")
                 self.wandb_run = wandb.init(
@@ -103,16 +98,15 @@ class Trainer:
                     id=wandb_run_id,
                     resume="allow",
                 )
-            OmegaConf.set_struct(cfg, False)
             cfg.wandb_run_id = self.wandb_run.id
-            OmegaConf.set_struct(cfg, True)
             wandb.run.name = "{}".format(model_name)
-            with open(os.path.join(os.getcwd(), "hydra.yaml"), "w") as f:
-                f.write(OmegaConf.to_yaml(cfg, resolve=True))
+            with open(os.path.join(os.getcwd(), "config.yaml"), "w") as f:
+                import yaml
+                yaml.dump(config_to_dict(cfg), f, default_flow_style=False)
 
         seed(cfg.training.seed)
         log.info(f"Loading dataset from {self.cfg.env.dataset.data_path} ...")
-        self.datasets, traj_dsets = hydra.utils.call(
+        self.datasets, traj_dsets = call(
             self.cfg.env.dataset,
             num_hist=self.cfg.num_hist,
             num_pred=self.cfg.num_pred,
@@ -210,14 +204,14 @@ class Trainer:
 
         # initialize encoder
         if self.encoder is None:
-            self.encoder = hydra.utils.instantiate(
+            self.encoder = instantiate(
                 self.cfg.encoder,
             )
         if not self.train_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
 
-        self.proprio_encoder = hydra.utils.instantiate(
+        self.proprio_encoder = instantiate(
             self.cfg.proprio_encoder,
             in_chans=self.datasets["train"].proprio_dim,
             emb_dim=self.cfg.proprio_emb_dim,
@@ -226,7 +220,7 @@ class Trainer:
         print(f"Proprio encoder type: {type(self.proprio_encoder)}")
         self.proprio_encoder = self.accelerator.prepare(self.proprio_encoder)
 
-        self.action_encoder = hydra.utils.instantiate(
+        self.action_encoder = instantiate(
             self.cfg.action_encoder,
             in_chans=self.datasets["train"].action_dim,
             emb_dim=self.cfg.action_emb_dim,
@@ -253,7 +247,7 @@ class Trainer:
 
         if self.cfg.has_predictor:
             if self.predictor is None:
-                self.predictor = hydra.utils.instantiate(
+                self.predictor = instantiate(
                     self.cfg.predictor,
                     num_patches=num_patches,
                     num_frames=self.cfg.num_hist,
@@ -282,7 +276,7 @@ class Trainer:
                         self.decoder = torch.load(decoder_path)
                     log.info(f"Loaded decoder from {decoder_path}")
                 else:
-                    self.decoder = hydra.utils.instantiate(
+                    self.decoder = instantiate(
                         self.cfg.decoder,
                         emb_dim=self.encoder.emb_dim,  # 384
                     )
@@ -292,7 +286,7 @@ class Trainer:
         self.encoder, self.predictor, self.decoder = self.accelerator.prepare(
             self.encoder, self.predictor, self.decoder
         )
-        self.model = hydra.utils.instantiate(
+        self.model = instantiate(
             self.cfg.model,
             encoder=self.encoder,
             proprio_encoder=self.proprio_encoder,
@@ -337,36 +331,9 @@ class Trainer:
             )
             self.decoder_optimizer = self.accelerator.prepare(self.decoder_optimizer)
 
-    def monitor_jobs(self, lock):
-        """
-        check planning eval jobs' status and update logs
-        """
-        while True:
-            with lock:
-                finished_jobs = [
-                    job_tuple for job_tuple in self.job_set if job_tuple[2].done()
-                ]
-                for epoch, job_name, job in finished_jobs:
-                    result = job.result()
-                    print(f"Logging result for {job_name} at epoch {epoch}: {result}")
-                    log_data = {
-                        f"{job_name}/{key}": value for key, value in result.items()
-                    }
-                    log_data["epoch"] = epoch
-                    self.wandb_run.log(log_data)
-                    self.job_set.remove((epoch, job_name, job))
-            time.sleep(1)
+    # Job monitoring removed in simplified version
 
     def run(self):
-        if self.accelerator.is_main_process:
-            executor = ThreadPoolExecutor(max_workers=4)
-            self.job_set = set()
-            lock = threading.Lock()
-
-            self.monitor_thread = threading.Thread(
-                target=self.monitor_jobs, args=(lock,), daemon=True
-            )
-            self.monitor_thread.start()
 
         init_epoch = self.epoch + 1  # epoch starts from 1
         for epoch in range(init_epoch, init_epoch + self.total_epochs):
@@ -378,34 +345,8 @@ class Trainer:
             self.logs_flash(step=self.epoch)
             if self.epoch % self.cfg.training.save_every_x_epoch == 0:
                 ckpt_path, model_name, model_epoch = self.save_ckpt()
-                # main thread only: launch planning jobs on the saved ckpt
-                if (
-                    self.cfg.plan_settings.plan_cfg_path is not None
-                    and ckpt_path is not None
-                ):  # ckpt_path is only not None for main process
-                    from plan import build_plan_cfg_dicts, launch_plan_jobs
-
-                    cfg_dicts = build_plan_cfg_dicts(
-                        plan_cfg_path=os.path.join(
-                            self.base_path, self.cfg.plan_settings.plan_cfg_path
-                        ),
-                        ckpt_base_path=self.cfg.ckpt_base_path,
-                        model_name=model_name,
-                        model_epoch=model_epoch,
-                        planner=self.cfg.plan_settings.planner,
-                        goal_source=self.cfg.plan_settings.goal_source,
-                        goal_H=self.cfg.plan_settings.goal_H,
-                        alpha=self.cfg.plan_settings.alpha,
-                    )
-                    jobs = launch_plan_jobs(
-                        epoch=self.epoch,
-                        cfg_dicts=cfg_dicts,
-                        plan_output_dir=os.path.join(
-                            os.getcwd(), "submitit-evals", f"epoch_{self.epoch}"
-                        ),
-                    )
-                    with lock:
-                        self.job_set.update(jobs)
+                # Planning job launching removed in simplified version
+                # Users can manually run planning scripts on saved checkpoints
 
     def err_eval_single(self, z_pred, z_tgt):
         logs = {}
@@ -812,8 +753,33 @@ class Trainer:
         )
 
 
-@hydra.main(config_path="conf", config_name="train")
-def main(cfg: OmegaConf):
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='Train DINO-WM model')
+    parser.add_argument('--env', type=str, choices=['pusht', 'granular'], required=True,
+                        help='Environment to train on')
+    parser.add_argument('--output-dir', type=str, default='./outputs',
+                        help='Output directory for saving models')
+    args = parser.parse_args()
+    
+    # Get configuration based on environment
+    if args.env == 'pusht':
+        cfg = get_pusht_train_config()
+    elif args.env == 'granular':
+        cfg = get_granular_train_config()
+    else:
+        raise ValueError(f"Unknown environment: {args.env}")
+    
+    # Set output directory
+    cfg.ckpt_base_path = args.output_dir
+    
+    # Create output directory structure
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d/%H-%M-%S")
+    output_path = os.path.join(args.output_dir, "outputs", timestamp)
+    os.makedirs(output_path, exist_ok=True)
+    os.chdir(output_path)
+    
     trainer = Trainer(cfg)
     trainer.run()
 

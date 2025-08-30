@@ -1,10 +1,10 @@
 import torch
-import hydra
 import copy
 import numpy as np
 from einops import rearrange, repeat
 from utils import slice_trajdict_with_t
 from .base_planner import BasePlanner
+from config_utils import instantiate
 
 
 class MPCPlanner(BasePlanner):
@@ -41,8 +41,9 @@ class MPCPlanner(BasePlanner):
         self.max_iter = np.inf if max_iter is None else max_iter
         self.n_taken_actions = n_taken_actions
         self.logging_prefix = logging_prefix
-        sub_planner["_target_"] = sub_planner["target"]
-        self.sub_planner = hydra.utils.instantiate(
+        if "target" in sub_planner:
+            sub_planner["_target_"] = sub_planner["target"]
+        self.sub_planner = instantiate(
             sub_planner,
             wm=self.wm,
             action_dim=self.action_dim,

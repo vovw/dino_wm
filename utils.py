@@ -4,7 +4,6 @@ import random
 import argparse
 import numpy as np
 from PIL import Image
-from omegaconf import OmegaConf
 from typing import Callable, Dict
 import psutil
 
@@ -69,12 +68,7 @@ def sample_tensors(tensors, n, indices=None):
     return tensors
 
 
-def cfg_to_dict(cfg):
-    cfg_dict = OmegaConf.to_container(cfg)
-    for key in cfg_dict:
-        if isinstance(cfg_dict[key], list):
-            cfg_dict[key] = ",".join(cfg_dict[key])
-    return cfg_dict
+
 
 def reduce_dict(f: Callable, d: Dict):
     return {k: reduce_dict(f, v) if isinstance(v, dict) else f(v) for k, v in d.items()}

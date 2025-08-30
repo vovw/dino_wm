@@ -1,7 +1,6 @@
 import os
 import gym
 import json
-import hydra
 import random
 import torch
 import pickle
@@ -9,17 +8,15 @@ import wandb
 import logging
 import warnings
 import numpy as np
-import submitit
-from itertools import product
 from pathlib import Path
 from einops import rearrange
-from omegaconf import OmegaConf, open_dict
 
 from env.venv import SubprocVectorEnv
-from custom_resolvers import replace_slash
 from preprocessor import Preprocessor
 from planning.evaluator import PlanEvaluator
-from utils import cfg_to_dict, seed
+from utils import seed
+from configs import PlanConfig, get_pusht_plan_config, get_granular_plan_config
+from config_utils import instantiate, call, config_to_dict
 
 warnings.filterwarnings("ignore")
 log = logging.getLogger(__name__)
@@ -36,76 +33,9 @@ def planning_main_in_dir(working_dir, cfg_dict):
     os.chdir(working_dir)
     return planning_main(cfg_dict=cfg_dict)
 
-def launch_plan_jobs(
-    epoch,
-    cfg_dicts,
-    plan_output_dir,
-):
-    with submitit.helpers.clean_env():
-        jobs = []
-        for cfg_dict in cfg_dicts:
-            subdir_name = f"{cfg_dict['planner']['name']}_goal_source={cfg_dict['goal_source']}_goal_H={cfg_dict['goal_H']}_alpha={cfg_dict['objective']['alpha']}"
-            subdir_path = os.path.join(plan_output_dir, subdir_name)
-            executor = submitit.AutoExecutor(
-                folder=subdir_path, slurm_max_num_timeout=20
-            )
-            executor.update_parameters(
-                **{
-                    k: v
-                    for k, v in cfg_dict["hydra"]["launcher"].items()
-                    if k != "submitit_folder"
-                }
-            )
-            cfg_dict["saved_folder"] = subdir_path
-            cfg_dict["wandb_logging"] = False  # don't init wandb
-            job = executor.submit(planning_main_in_dir, subdir_path, cfg_dict)
-            jobs.append((epoch, subdir_name, job))
-            print(
-                f"Submitted evaluation job for checkpoint: {subdir_path}, job id: {job.job_id}"
-            )
-        return jobs
-
-
-def build_plan_cfg_dicts(
-    plan_cfg_path="",
-    ckpt_base_path="",
-    model_name="",
-    model_epoch="final",
-    planner=["gd", "cem"],
-    goal_source=["dset"],
-    goal_H=[1, 5, 10],
-    alpha=[0, 0.1, 1],
-):
-    """
-    Return a list of plan overrides, for model_path, add a key in the dict {"model_path": model_path}.
-    """
-    config_path = os.path.dirname(plan_cfg_path)
-    overrides = [
-        {
-            "planner": p,
-            "goal_source": g_source,
-            "goal_H": g_H,
-            "ckpt_base_path": ckpt_base_path,
-            "model_name": model_name,
-            "model_epoch": model_epoch,
-            "objective": {"alpha": a},
-        }
-        for p, g_source, g_H, a in product(planner, goal_source, goal_H, alpha)
-    ]
-    cfg = OmegaConf.load(plan_cfg_path)
-    cfg_dicts = []
-    for override_args in overrides:
-        planner = override_args["planner"]
-        planner_cfg = OmegaConf.load(
-            os.path.join(config_path, f"planner/{planner}.yaml")
-        )
-        cfg["planner"] = OmegaConf.merge(cfg.get("planner", {}), planner_cfg)
-        override_args.pop("planner")
-        cfg = OmegaConf.merge(cfg, OmegaConf.create(override_args))
-        cfg_dict = OmegaConf.to_container(cfg)
-        cfg_dict["planner"]["horizon"] = cfg_dict["goal_H"]  # assume planning horizon equals to goal horizon
-        cfg_dicts.append(cfg_dict)
-    return cfg_dicts
+# These functions are no longer used in the simplified version
+# def launch_plan_jobs(...) - removed
+# def build_plan_cfg_dicts(...) - removed
 
 
 class PlanWorkspace:
@@ -137,7 +67,7 @@ class PlanWorkspace:
         self.action_dim = self.dset.action_dim * self.frameskip
         self.debug_dset_init = cfg_dict["debug_dset_init"]
 
-        objective_fn = hydra.utils.call(
+        objective_fn = call(
             cfg_dict["objective"],
         )
 
@@ -175,7 +105,7 @@ class PlanWorkspace:
             self.wandb_run = DummyWandbRun()
 
         self.log_filename = "logs.json"  # planner and final eval logs are dumped here
-        self.planner = hydra.utils.instantiate(
+        self.planner = instantiate(
             self.cfg_dict["planner"],
             wm=self.wm,
             env=self.env,  # only for mpc
@@ -370,7 +300,7 @@ def load_model(model_ckpt, train_cfg, num_action_repeat, device):
         print(f"Resuming from epoch {result['epoch']}: {model_ckpt}")
 
     if "encoder" not in result:
-        result["encoder"] = hydra.utils.instantiate(
+        result["encoder"] = instantiate(
             train_cfg.encoder,
         )
     if "predictor" not in result:
@@ -393,7 +323,7 @@ def load_model(model_ckpt, train_cfg, num_action_repeat, device):
     elif not train_cfg.has_decoder:
         result["decoder"] = None
 
-    model = hydra.utils.instantiate(
+    model = instantiate(
         train_cfg.model,
         encoder=result["encoder"],
         proprio_encoder=result["proprio_encoder"],
@@ -440,11 +370,25 @@ def planning_main(cfg_dict):
 
     ckpt_base_path = cfg_dict["ckpt_base_path"]
     model_path = f"{ckpt_base_path}/outputs/{cfg_dict['model_name']}/"
-    with open(os.path.join(model_path, "hydra.yaml"), "r") as f:
-        model_cfg = OmegaConf.load(f)
+    config_path = os.path.join(model_path, "config.yaml")
+    if os.path.exists(config_path):
+        import yaml
+        with open(config_path, "r") as f:
+            model_cfg_dict = yaml.safe_load(f)
+        # Convert dict to object for attribute access
+        class ConfigObj:
+            def __init__(self, d):
+                for k, v in d.items():
+                    if isinstance(v, dict):
+                        setattr(self, k, ConfigObj(v))
+                    else:
+                        setattr(self, k, v)
+        model_cfg = ConfigObj(model_cfg_dict)
+    else:
+        raise FileNotFoundError(f"Config file not found at {config_path}")
 
     seed(cfg_dict["seed"])
-    _, dset = hydra.utils.call(
+    _, dset = call(
         model_cfg.env.dataset,
         num_hist=model_cfg.num_hist,
         num_pred=model_cfg.num_pred,
@@ -493,12 +437,42 @@ def planning_main(cfg_dict):
     return logs
 
 
-@hydra.main(config_path="conf", config_name="plan")
-def main(cfg: OmegaConf):
-    with open_dict(cfg):
-        cfg["saved_folder"] = os.getcwd()
-        log.info(f"Planning result saved dir: {cfg['saved_folder']}")
-    cfg_dict = cfg_to_dict(cfg)
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='Plan with DINO-WM model')
+    parser.add_argument('--env', type=str, choices=['pusht', 'granular'], required=True,
+                        help='Environment to plan for')
+    parser.add_argument('--model-path', type=str, required=True,
+                        help='Path to trained model directory')
+    parser.add_argument('--output-dir', type=str, default='./plan_outputs',
+                        help='Output directory for planning results')
+    parser.add_argument('--model-epoch', type=str, default='latest',
+                        help='Model epoch to load (default: latest)')
+    args = parser.parse_args()
+    
+    # Get configuration based on environment
+    if args.env == 'pusht':
+        cfg = get_pusht_plan_config()
+    elif args.env == 'granular':
+        cfg = get_granular_plan_config()
+    else:
+        raise ValueError(f"Unknown environment: {args.env}")
+    
+    # Set paths
+    cfg.ckpt_base_path = os.path.dirname(args.model_path)
+    cfg.model_name = os.path.basename(args.model_path)
+    cfg.model_epoch = args.model_epoch
+    
+    # Create output directory structure
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    output_path = os.path.join(args.output_dir, f"{timestamp}_{cfg.model_name}_gH{cfg.goal_H}")
+    os.makedirs(output_path, exist_ok=True)
+    os.chdir(output_path)
+    
+    cfg.saved_folder = os.getcwd()
+    log.info(f"Planning result saved dir: {cfg.saved_folder}")
+    cfg_dict = config_to_dict(cfg)
     cfg_dict["wandb_logging"] = True
     planning_main(cfg_dict)
 
